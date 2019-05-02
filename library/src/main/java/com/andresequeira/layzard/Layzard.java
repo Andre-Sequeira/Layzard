@@ -12,19 +12,17 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import androidx.annotation.*;
-import androidx.appcompat.app.AlertDialog;
-import androidx.viewpager.widget.ViewPager;
 
 import java.util.*;
 
-import static com.andresequeira.layzard.BaseLayout.Dispatchers.*;
+import static com.andresequeira.layzard.Layzard.Dispatchers.*;
 
 /**
  * TODO: set result mechanism
  * idea -> receiveResult(Bundle) : Bundle(Int requestData, Bundle result)
  * -> navigator toRequester(Bundle result)
  */
-public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
+public abstract class Layzard implements LayzardListener<Layzard> {
 
     private static boolean debugEnabled;
     private boolean logCycle;
@@ -34,17 +32,18 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
         debugEnabled = enable;
     }
 
-    private static final LinkedHashSet<LayoutListener<BaseLayout>> commonListeners = new LinkedHashSet<>();
+    private static final LinkedHashSet<LayzardListener<Layzard>> commonListeners = new LinkedHashSet<>();
 
     @SuppressWarnings({"ManualArrayToCollectionCopy", "UseBulkOperation"})
     @SafeVarargs
-    public static void addCommonListeners(LayoutListener<BaseLayout>... listeners) {
-        for (LayoutListener<BaseLayout> listener : listeners) {
+    public static void addCommonListeners(LayzardListener<Layzard>... listeners) {
+        for (LayzardListener<Layzard> listener : listeners) {
             commonListeners.add(listener);
         }
     }
 
-    public static <LAYOUT extends BaseLayout> Initializer<LAYOUT> newInitializer(
+    @NonNull
+    public static <LAYOUT extends Layzard> Initializer<LAYOUT> newInitializer(
             Class<LAYOUT> layoutClass) {
         return new Initializer<>(layoutClass);
     }
@@ -63,16 +62,13 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
         return debugEnabled && logCycle;
     }
 
-    private static final String KEY_BUNDLE = "BaseLayout.args";
-    private static final String KEY_ID = "BaseLayout.id";
-    private static final String KEY_LAYOUT_ARGS = "BaseLayout.args";
-    private static final String KEY_SAVED_STATE = "BaseLayout.savedState";
-    private static final String KEY_FIRST_BIND = "BaseLayout.firstBind";
+    private static final String KEY_BUNDLE = "Layzard.args";
+    private static final String KEY_ID = "Layzard.id";
+    private static final String KEY_LAYOUT_ARGS = "Layzard.args";
+    private static final String KEY_SAVED_STATE = "Layzard.savedState";
+    private static final String KEY_FIRST_BIND = "Layzard.firstBind";
 
     private LinkedList<String> requiredArgKeys = new LinkedList<>();
-    private ViewPager viewPager;
-
-    private AlertDialog alertDialog;
 
     private Object host;
 
@@ -86,7 +82,7 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
     private boolean isTop;
     private boolean isRoot;
 
-    private boolean initialized;
+    private boolean created;
     private boolean restore;
 
     private boolean bound;
@@ -94,25 +90,25 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
 
     private boolean argsRequired;
 
-    private boolean reinitializing;
-    private boolean initializing;
+    private boolean recreating;
+    private boolean creating;
     private boolean binding;
 
     private Bundle args;
 
-    private LinkedHashSet<LayoutListener<BaseLayout>> pendingPreLifecycleListeners =
+    private LinkedHashSet<LayzardListener<Layzard>> pendingPreLifecycleListeners =
             new LinkedHashSet<>();
-    private LinkedHashSet<LayoutListener<BaseLayout>> pendingLifecycleListeners =
+    private LinkedHashSet<LayzardListener<Layzard>> pendingLifecycleListeners =
             new LinkedHashSet<>();
 
-    private ListenerDispatcher<BaseLayout> dispatcher = new ListenerDispatcher<>();
+    private ListenerDispatcher<Layzard> dispatcher = new ListenerDispatcher<>();
     private ChildrenHandler childrenHandler = new ChildrenHandler();
 
-    public BaseLayout() {
+    public Layzard() {
         this(null);
     }
 
-    public BaseLayout(@Nullable Bundle args) {
+    public Layzard(@Nullable Bundle args) {
         if (args != null) {
             newArgs(args);
         }
@@ -131,27 +127,27 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
     }
 
     @SuppressWarnings("unchecked")
-    public final <L extends BaseLayout> L addLifecycleListener(
-            LayoutListener<L> listener) {
+    public final <L extends Layzard> L addLifecycleListener(
+            LayzardListener<L> listener) {
         if (listener == null || listener == this) {
             return (L) this;
         }
         if (dispatcher.isEmpty()) {
-            pendingLifecycleListeners.add((LayoutListener<BaseLayout>) listener);
+            pendingLifecycleListeners.add((LayzardListener<Layzard>) listener);
             return (L) this;
         }
-        this.dispatcher.add((LayoutListener<BaseLayout>) listener);
+        this.dispatcher.add((LayzardListener<Layzard>) listener);
         return (L) this;
     }
 
-    protected final void addPreLifecycleListener(LayoutListener listener) {
-        if (isInitialized()) {
+    protected final void addPreLifecycleListener(LayzardListener listener) {
+        if (isCreated()) {
             return;
         }
         pendingPreLifecycleListeners.add(listener);
     }
 
-    public final void removeLifecycleListener(LayoutListener listener) {
+    public final void removeLifecycleListener(LayzardListener listener) {
         if (listener == this) {
             return;
         }
@@ -166,16 +162,16 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
         return isRoot;
     }
 
-    public BaseLayout setIsTop(boolean top) {
-        if (initialized) {
+    public Layzard setIsTop(boolean top) {
+        if (created) {
             return this;
         }
         isTop = top;
         return this;
     }
 
-    public BaseLayout setIsRoot(boolean root) {
-        if (initialized) {
+    public Layzard setIsRoot(boolean root) {
+        if (created) {
             return this;
         }
         isRoot = root;
@@ -183,7 +179,7 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
     }
 
     void setHost(Object host) {
-        if (isInitialized() || isInitializing()) {
+        if (isCreated() || isCreating()) {
             throw new RuntimeException("This should just be a test but it's here just in case");
         }
         if (host == null) {
@@ -198,9 +194,9 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
     }
 
     public <H> H getTopHost() {
-        if (host instanceof BaseLayout) {
+        if (host instanceof Layzard) {
             //noinspection unchecked
-            return (H) ((BaseLayout) host).getTopHost();
+            return (H) ((Layzard) host).getTopHost();
         }
         return getHost();
     }
@@ -217,8 +213,8 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
         return argsRequired;
     }
 
-    public boolean isInitialized() {
-        return initialized;
+    public boolean isCreated() {
+        return created;
     }
 
     public boolean isRestore() {
@@ -233,8 +229,8 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
         return bound;
     }
 
-    public boolean isInitializing() {
-        return initializing;
+    public boolean isCreating() {
+        return creating;
     }
 
     public boolean isBinding() {
@@ -246,8 +242,8 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
     }
 
     //region Args
-    public final <L extends BaseLayout> L newArgs(@NonNull Bundle args) {
-        if (!initialized && !initializing) {
+    public final <L extends Layzard> L newArgs(@NonNull Bundle args) {
+        if (!created && !creating) {
             this.args = args;
             //noinspection unchecked
             return (L) this;
@@ -275,7 +271,7 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
         }
         this.args = args;
 
-        reInit(args);
+        reCreate(args);
 
         //noinspection unchecked
         return (L) this;
@@ -323,54 +319,54 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
         return String.format("%s_%s", KEY_BUNDLE, id);
     }
 
-    //region ReInit
-    private void reInit(Bundle bundle) {
+    //region ReCreate
+    private void reCreate(Bundle bundle) {
         dispatch(onPreReInit);
 
-        reinitializing = true;
-        reInit1(bundle);
+        recreating = true;
+        reCreate1(bundle);
 
         dispatch(onReInit);
     }
 
     @CallSuper
-    protected void reInit1(Bundle bundle) {
+    protected void reCreate1(Bundle bundle) {
         boolean wasBound = bound;
         unbind();
         View view = getView();
         destroyUi();
         destroy();
 
-        boolean wasInit = initialized;
+        boolean wasInit = created;
 
         if (wasInit) {
-            init(host, context, bundle);
+            create(host, context, bundle);
 
             if (view != null) {
-                initUi(view);
+                createView(view);
             }
 
             if (wasBound) {
                 bind();
             }
         }
-        reinitializing = false;
+        recreating = false;
     }
     //endregion
 
-    //region Init
-    public final void init(@Nullable Bundle outerBundle, @NonNull Object host, @NonNull Context context) {
-        init(host, context, getCheckLayoutArgs(outerBundle));
+    //region Create
+    public final void create(@Nullable Bundle outerBundle, @NonNull Object host, @NonNull Context context) {
+        create(host, context, getCheckLayoutArgs(outerBundle));
     }
 
-    public final void init(@NonNull Object host, @NonNull Context context, @Nullable Bundle args) {
-        if (initialized) {
-            throw new RuntimeException("Already initialized");
+    public final void create(@NonNull Object host, @NonNull Context context, @Nullable Bundle args) {
+        if (created) {
+            throw new RuntimeException("Already created");
         }
 
         setHost(host);
 
-        if (!reinitializing) {
+        if (!recreating) {
             dispatcher.addAll(pendingPreLifecycleListeners);
             dispatcher.add(this);
             dispatcher.add(childrenHandler);
@@ -388,12 +384,12 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
         }
 
         dispatch(onPreInit);
-        initializing = true;
+        creating = true;
 
-        logCycle("init");
+        logCycle("create");
 
         processArgs(args);
-        init();
+        create();
         dispatch(onInit);
 
         restoreInstanceState(instanceState);
@@ -401,9 +397,9 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
     }
 
     @CallSuper
-    protected void init() {
-        initializing = false;
-        initialized = true;
+    protected void create() {
+        creating = false;
+        created = true;
     }
     //endregion
 
@@ -443,14 +439,14 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
     //region Restore
     public final void restore(Bundle outerBundle, Object host, Context context, Bundle outerInstanceState, String id) {
         restore(outerInstanceState, id);
-        init(outerBundle, host, context);
+        create(outerBundle, host, context);
     }
 
     public final void restore(Object host, Context context, Bundle layoutArgs, Bundle outerInstanceState, String id) {
         if (outerInstanceState != null) {
             restore(outerInstanceState, id);
         }
-        init(host, context, layoutArgs);
+        create(host, context, layoutArgs);
     }
 
     public final void restore(Bundle outerInstanceState, String id) {
@@ -472,7 +468,7 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
         instanceState = layoutBundle.getBundle(KEY_SAVED_STATE);
         restore = true;
 
-        if (!isInitialized()) {
+        if (!isCreated()) {
             return;
         }
 
@@ -492,36 +488,36 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
     }
     //endregion
 
-    //region InitUi
-    public final View initUi(ViewGroup parent) {
-        return initUi(parent, true);
+    //region CreateView
+    public final View createView(ViewGroup parent) {
+        return createView(parent, true);
     }
 
-    public final View initUi(ViewGroup parent, boolean bind) {
+    public final View createView(ViewGroup parent, boolean bind) {
 //        if (this.context == null) {
 //            this.context = parent.getContext();
 //        }
 
-        return initUi(null, LayoutInflater.from(parent.getContext()), parent, bind);
+        return createView(null, LayoutInflater.from(parent.getContext()), parent, bind);
     }
 
-    public final View initUi(LayoutInflater inflater, ViewGroup parent) {
-        return initUi(null, inflater, parent, true);
+    public final View createView(LayoutInflater inflater, ViewGroup parent) {
+        return createView(null, inflater, parent, true);
     }
 
-    public final View initUi(Object host, LayoutInflater inflater, ViewGroup parent, boolean performBind) {
+    public final View createView(Object host, LayoutInflater inflater, ViewGroup parent, boolean performBind) {
         if (view != null) {
             return view;
         }
 
-        if (!initialized) {
-            init(host, inflater.getContext(), null);
+        if (!created) {
+            create(host, inflater.getContext(), null);
         }
 
-        logCycle("initUi");
+        logCycle("createView");
 
         dispatch(onPreInitUi);
-        initUi(inflater.inflate(getLayoutResId(), parent, false));
+        createView(inflater.inflate(getLayoutResId(), parent, false));
         dispatch(onInitUi, view);
         if (performBind) {
             bind();
@@ -530,7 +526,7 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
     }
 
     @CallSuper
-    protected void initUi(View v) {
+    protected void createView(View v) {
         this.view = v;
     }
     //endregion
@@ -603,13 +599,7 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
 
     @CallSuper
     protected void destroyUi(View view) {
-        viewPager = null;
         this.view = null;
-
-        if (alertDialog != null) {
-            alertDialog.dismiss();
-            alertDialog = null;
-        }
     }
     //endregion
 
@@ -617,7 +607,7 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
     public final void destroy() {
         destroyUi();
 
-        if (!initialized) {
+        if (!created) {
             return;
         }
 
@@ -626,15 +616,15 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
         logCycle("destroy");
         dispatch(onDestroy);
 
-        if (!reinitializing) {
+        if (!recreating) {
             this.dispatcher.clear();
         }
     }
 
     protected void destroy1() {
-        initialized = false;
+        created = false;
         context = null;
-        if (!reinitializing) {
+        if (!recreating) {
             host = null;
         }
     }
@@ -652,11 +642,6 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
         }
         return false;
     }
-
-    protected void handleDialog(AlertDialog alertDialog) {
-        this.alertDialog = alertDialog;
-    }
-
 
     //region RESOURCE HELPER
     public Resources getResources() {
@@ -678,16 +663,16 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
         initInside(initializer, parent, null);
     }
 
-    protected <L extends BaseLayout> void initInside(Initializer<L> initializer, ViewGroup parent, LayoutListener<L> onCreateListener) {
+    protected <L extends Layzard> void initInside(Initializer<L> initializer, ViewGroup parent, LayzardListener<L> onCreateListener) {
         final ChildHandler childHandler = new ChildHandler<>(initializer, 0, parent, onCreateListener);
         addChildHandler(childHandler);
     }
 
-    protected <L extends BaseLayout> void initInside(Initializer<L> initializer, @IdRes int parentViewId) {
+    protected <L extends Layzard> void initInside(Initializer<L> initializer, @IdRes int parentViewId) {
         initInside(initializer, parentViewId, null);
     }
 
-    protected <L extends BaseLayout> void initInside(Initializer<L> initializer, @IdRes int parentViewId, LayoutListener<L> onCreateListener) {
+    protected <L extends Layzard> void initInside(Initializer<L> initializer, @IdRes int parentViewId, LayzardListener<L> onCreateListener) {
         final ChildHandler childHandler = new ChildHandler<>(initializer, parentViewId, null, onCreateListener);
         addChildHandler(childHandler);
     }
@@ -697,19 +682,19 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
         childrenHandler.add(childHandler);
     }
 
-    public Map<String, BaseLayout> getChildren() {
+    public Map<String, Layzard> getChildren() {
         return childrenHandler.getLayoutsMap();
     }
 
-    public BaseLayout getChild(String tag) {
+    public Layzard getChild(String tag) {
         return childrenHandler.get(tag).layout;
     }
 
-    public BaseLayout getChild(int index) {
+    public Layzard getChild(int index) {
         return childrenHandler.get(index).layout;
     }
 
-    public <L extends BaseLayout> L getChild(Class<L> layoutClass) {
+    public <L extends Layzard> L getChild(Class<L> layoutClass) {
         final ChildHandler<L> childHandler = childrenHandler.get(layoutClass);
         if (childHandler == null) {
             return null;
@@ -718,113 +703,113 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
     }
 
     private void dispatch(
-            Dispatchers.EventDispatcher<Dispatchers.LayoutDispatcher<BaseLayout>> dispatcher) {
+            Dispatchers.EventDispatcher<Dispatchers.LayoutDispatcher<Layzard>> dispatcher) {
         this.dispatcher.dispatch(dispatcher, this);
     }
 
     private void dispatch(
-            Dispatchers.EventDispatcher<Dispatchers.BundleDispatcher<BaseLayout>> dispatcher,
+            Dispatchers.EventDispatcher<Dispatchers.BundleDispatcher<Layzard>> dispatcher,
             Bundle bundle) {
         this.dispatcher.dispatch(dispatcher, this, bundle);
 
     }
 
     private void dispatch(
-            Dispatchers.EventDispatcher<Dispatchers.ViewDispatcher<BaseLayout>> dispatcher,
+            Dispatchers.EventDispatcher<Dispatchers.ViewDispatcher<Layzard>> dispatcher,
             View view) {
         this.dispatcher.dispatch(dispatcher, this, view);
     }
 
     public interface Dispatchers {
 
-        EventDispatcher<LayoutDispatcher<BaseLayout>> onPreReInit = new EventDispatcher<>(Event.PRE_RE_INIT, LayoutListener::onPreReInit);
-        EventDispatcher<LayoutDispatcher<BaseLayout>> onReInit = new EventDispatcher<>(Event.RE_INIT, LayoutListener::onReInit);
-        EventDispatcher<LayoutDispatcher<BaseLayout>> onPreInit = new EventDispatcher<>(Event.PRE_INIT, LayoutListener::onPreInit);
-        EventDispatcher<LayoutDispatcher<BaseLayout>> onInit = new EventDispatcher<>(Event.INIT, LayoutListener::onInit);
-        EventDispatcher<BundleDispatcher<BaseLayout>> onSaveState = new EventDispatcher<>(Event.SAVE, LayoutListener::onSaveState);
-        EventDispatcher<BundleDispatcher<BaseLayout>> onRestoreState = new EventDispatcher<>(Event.RESTORE, LayoutListener::onRestoreState);
-        EventDispatcher<LayoutDispatcher<BaseLayout>> onPreInitUi = new EventDispatcher<>(Event.PRE_INIT_UI, LayoutListener::onPreInitUi);
-        EventDispatcher<ViewDispatcher<BaseLayout>> onInitUi = new EventDispatcher<>(Event.INIT_UI, LayoutListener::onInitUi);
-        EventDispatcher<LayoutDispatcher<BaseLayout>> onPreBind = new EventDispatcher<>(Event.PRE_BIND, LayoutListener::onPreBind);
-        EventDispatcher<LayoutDispatcher<BaseLayout>> onBind = new EventDispatcher<>(Event.BIND, LayoutListener::onBind);
-        EventDispatcher<LayoutDispatcher<BaseLayout>> onBound = new EventDispatcher<>(Event.BOUND, LayoutListener::onBound);
-        EventDispatcher<LayoutDispatcher<BaseLayout>> onPreUnbind = new EventDispatcher<>(Event.PRE_UNBIND, LayoutListener::onPreUnbind);
-        EventDispatcher<LayoutDispatcher<BaseLayout>> onUnbind = new EventDispatcher<>(Event.UNBIND, LayoutListener::onUnbind);
-        EventDispatcher<LayoutDispatcher<BaseLayout>> onPreRebind = new EventDispatcher<>(Event.PRE_RE_BIND, LayoutListener::onPreRebind);
-        EventDispatcher<LayoutDispatcher<BaseLayout>> onRebind = new EventDispatcher<>(Event.RE_BIND, LayoutListener::onRebind);
-        EventDispatcher<ViewDispatcher<BaseLayout>> onPreDestroyUi = new EventDispatcher<>(Event.PRE_DESTROY_UI, LayoutListener::onPreDestroyUi);
-        EventDispatcher<ViewDispatcher<BaseLayout>> onDestroyUi = new EventDispatcher<>(Event.DESTROY_UI, LayoutListener::onDestroyUi);
-        EventDispatcher<LayoutDispatcher<BaseLayout>> onPreDestroy = new EventDispatcher<>(Event.PRE_DESTROY, LayoutListener::onPreDestroy);
-        EventDispatcher<LayoutDispatcher<BaseLayout>> onDestroy = new EventDispatcher<>(Event.DESTROY, LayoutListener::onDestroy);
+        EventDispatcher<LayoutDispatcher<Layzard>> onPreReInit = new EventDispatcher<>(LayzardEvent.PRE_RE_CREATE, LayzardListener::onPreReInit);
+        EventDispatcher<LayoutDispatcher<Layzard>> onReInit = new EventDispatcher<>(LayzardEvent.RE_CREATE, LayzardListener::onReInit);
+        EventDispatcher<LayoutDispatcher<Layzard>> onPreInit = new EventDispatcher<>(LayzardEvent.PRE_CREATE, LayzardListener::onPreInit);
+        EventDispatcher<LayoutDispatcher<Layzard>> onInit = new EventDispatcher<>(LayzardEvent.CREATE, LayzardListener::onInit);
+        EventDispatcher<BundleDispatcher<Layzard>> onSaveState = new EventDispatcher<>(LayzardEvent.SAVE, LayzardListener::onSaveState);
+        EventDispatcher<BundleDispatcher<Layzard>> onRestoreState = new EventDispatcher<>(LayzardEvent.RESTORE, LayzardListener::onRestoreState);
+        EventDispatcher<LayoutDispatcher<Layzard>> onPreInitUi = new EventDispatcher<>(LayzardEvent.PRE_CREATE_VIEW, LayzardListener::onPreInitUi);
+        EventDispatcher<ViewDispatcher<Layzard>> onInitUi = new EventDispatcher<>(LayzardEvent.CREATE_VIEW, LayzardListener::onInitUi);
+        EventDispatcher<LayoutDispatcher<Layzard>> onPreBind = new EventDispatcher<>(LayzardEvent.PRE_BIND, LayzardListener::onPreBind);
+        EventDispatcher<LayoutDispatcher<Layzard>> onBind = new EventDispatcher<>(LayzardEvent.BIND, LayzardListener::onBind);
+        EventDispatcher<LayoutDispatcher<Layzard>> onBound = new EventDispatcher<>(LayzardEvent.BOUND, LayzardListener::onBound);
+        EventDispatcher<LayoutDispatcher<Layzard>> onPreUnbind = new EventDispatcher<>(LayzardEvent.PRE_UNBIND, LayzardListener::onPreUnbind);
+        EventDispatcher<LayoutDispatcher<Layzard>> onUnbind = new EventDispatcher<>(LayzardEvent.UNBIND, LayzardListener::onUnbind);
+        EventDispatcher<LayoutDispatcher<Layzard>> onPreRebind = new EventDispatcher<>(LayzardEvent.PRE_RE_BIND, LayzardListener::onPreRebind);
+        EventDispatcher<LayoutDispatcher<Layzard>> onRebind = new EventDispatcher<>(LayzardEvent.RE_BIND, LayzardListener::onRebind);
+        EventDispatcher<ViewDispatcher<Layzard>> onPreDestroyUi = new EventDispatcher<>(LayzardEvent.PRE_DESTROY_VIEW, LayzardListener::onPreDestroyUi);
+        EventDispatcher<ViewDispatcher<Layzard>> onDestroyUi = new EventDispatcher<>(LayzardEvent.DESTROY_VIEW, LayzardListener::onDestroyUi);
+        EventDispatcher<LayoutDispatcher<Layzard>> onPreDestroy = new EventDispatcher<>(LayzardEvent.PRE_DESTROY, LayzardListener::onPreDestroy);
+        EventDispatcher<LayoutDispatcher<Layzard>> onDestroy = new EventDispatcher<>(LayzardEvent.DESTROY, LayzardListener::onDestroy);
 
 
         class EventDispatcher<D extends Dispatcher> {
 
-            LayoutListener.Event event;
+            LayzardEvent event;
             D d;
 
-            public EventDispatcher(LayoutListener.Event event, D d) {
+            public EventDispatcher(LayzardEvent event, D d) {
                 this.event = event;
                 this.d = d;
             }
         }
 
-        interface Dispatcher<L extends BaseLayout> {
-            void call(LayoutListener<L> listener, L layout, View view, Bundle bundle);
+        interface Dispatcher<L extends Layzard> {
+            void call(LayzardListener<L> listener, L layout, View view, Bundle bundle);
         }
 
-        interface LayoutDispatcher<L extends BaseLayout> extends Dispatcher<L> {
+        interface LayoutDispatcher<L extends Layzard> extends Dispatcher<L> {
 
-            default void call(LayoutListener<L> listener, L layout, View view, Bundle bundle) {
+            default void call(LayzardListener<L> listener, L layout, View view, Bundle bundle) {
                 call(listener, layout);
             }
 
-            void call(LayoutListener<L> listener, L layout);
+            void call(LayzardListener<L> listener, L layout);
         }
 
-        interface ViewDispatcher<L extends BaseLayout> extends Dispatcher<L> {
+        interface ViewDispatcher<L extends Layzard> extends Dispatcher<L> {
 
-            default void call(LayoutListener<L> listener, L layout, View view, Bundle bundle) {
+            default void call(LayzardListener<L> listener, L layout, View view, Bundle bundle) {
                 call(listener, layout, view);
             }
 
-            void call(LayoutListener<L> listener, L layout, View bundle);
+            void call(LayzardListener<L> listener, L layout, View bundle);
         }
 
-        interface BundleDispatcher<L extends BaseLayout> extends Dispatcher<L> {
+        interface BundleDispatcher<L extends Layzard> extends Dispatcher<L> {
 
-            default void call(LayoutListener<L> listener, L layout, View view, Bundle bundle) {
+            default void call(LayzardListener<L> listener, L layout, View view, Bundle bundle) {
                 call(listener, layout, bundle);
             }
 
-            void call(LayoutListener<L> listener, L layout, Bundle bundle);
+            void call(LayzardListener<L> listener, L layout, Bundle bundle);
         }
     }
 
-    public static class ListenerDispatcher<LAYOUT extends BaseLayout> implements
-            LayoutListener<LAYOUT> {
+    public static class ListenerDispatcher<LAYOUT extends Layzard> implements
+            LayzardListener<LAYOUT> {
 
-        LinkedHashSet<LayoutListener<LAYOUT>> lifecycleListeners = new LinkedHashSet<>();
-        ArrayList<LayoutListener<LAYOUT>> listeners;
+        LinkedHashSet<LayzardListener<LAYOUT>> lifecycleListeners = new LinkedHashSet<>();
+        ArrayList<LayzardListener<LAYOUT>> listeners;
 
         public ListenerDispatcher() {
 
         }
 
-        public void add(LayoutListener<LAYOUT> listener) {
+        public void add(LayzardListener<LAYOUT> listener) {
             lifecycleListeners.add(listener);
             if (listeners != null) {
                 listeners.add(listener);
             }
         }
 
-        public void addAll(Collection<LayoutListener<LAYOUT>> items) {
-            for (LayoutListener<LAYOUT> item : items) {
+        public void addAll(Collection<LayzardListener<LAYOUT>> items) {
+            for (LayzardListener<LAYOUT> item : items) {
                 add(item);
             }
         }
 
-        public void remove(LayoutListener<LAYOUT> listener) {
+        public void remove(LayzardListener<LAYOUT> listener) {
             lifecycleListeners.remove(listener);
             if (listeners != null) {
                 listeners.remove(listener);
@@ -847,12 +832,12 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
         void dispatch(Dispatchers.EventDispatcher<Dispatchers.Dispatcher<LAYOUT>> dispatcher, LAYOUT layout, @Nullable View view, @Nullable Bundle bundle) {
             final int size = listeners.size();
             for (int i = 0; i < size; i++) {
-                LayoutListener<LAYOUT> listener = listeners.get(i);
+                LayzardListener<LAYOUT> listener = listeners.get(i);
                 if (!listener.onEvent(dispatcher.event, layout, view, bundle)) {
                     dispatcher.d.call(listener, layout, view, bundle);
                 }
             }
-//            for (LayoutListener<LAYOUT> listener : lifecycleListeners) {
+//            for (LayzardListener<LAYOUT> listener : lifecycleListeners) {
 //                try {
 //                } catch (ClassCastException e) {
 //                    throwLayoutCastException(e, listener);
@@ -861,21 +846,21 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
         }
 
         @SuppressWarnings("unchecked")
-        void dispatch(Dispatchers.EventDispatcher<Dispatchers.LayoutDispatcher<BaseLayout>> dispatcher, LAYOUT layout) {
-            dispatch( (Dispatchers.EventDispatcher) dispatcher, layout, null, null);
+        void dispatch(Dispatchers.EventDispatcher<Dispatchers.LayoutDispatcher<Layzard>> dispatcher, LAYOUT layout) {
+            dispatch((Dispatchers.EventDispatcher) dispatcher, layout, null, null);
         }
 
         @SuppressWarnings("unchecked")
-        void dispatch(Dispatchers.EventDispatcher<Dispatchers.BundleDispatcher<BaseLayout>> dispatcher, LAYOUT layout, Bundle bundle) {
-            dispatch( (Dispatchers.EventDispatcher) dispatcher, layout, null, bundle);
+        void dispatch(Dispatchers.EventDispatcher<Dispatchers.BundleDispatcher<Layzard>> dispatcher, LAYOUT layout, Bundle bundle) {
+            dispatch((Dispatchers.EventDispatcher) dispatcher, layout, null, bundle);
         }
 
         @SuppressWarnings("unchecked")
-        void dispatch(Dispatchers.EventDispatcher<Dispatchers.ViewDispatcher<BaseLayout>> dispatcher, LAYOUT layout, View view) {
-            dispatch( (Dispatchers.EventDispatcher) dispatcher, layout, view, null);
+        void dispatch(Dispatchers.EventDispatcher<Dispatchers.ViewDispatcher<Layzard>> dispatcher, LAYOUT layout, View view) {
+            dispatch((Dispatchers.EventDispatcher) dispatcher, layout, view, null);
         }
 
-        private void throwLayoutCastException(ClassCastException e, LayoutListener l) {
+        private void throwLayoutCastException(ClassCastException e, LayzardListener l) {
             throw new RuntimeException(
                     "Listener: " + l + "does not match layout",
                     e
@@ -884,7 +869,7 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
 
 
         @Override
-        public boolean onEvent(Event event, LAYOUT layout, @Nullable View view, @Nullable Bundle savedState) {
+        public boolean onEvent(LayzardEvent event, LAYOUT layout, @Nullable View view, @Nullable Bundle savedState) {
             return false;
         }
 
@@ -990,8 +975,8 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
 
         @Override
         public boolean onHandleBack(LAYOUT layout) {
-            for (LayoutListener<LAYOUT> listener : lifecycleListeners) {
-                final boolean b = listener.onEvent(Event.BACK, layout, null, null);
+            for (LayzardListener<LAYOUT> listener : lifecycleListeners) {
+                final boolean b = listener.onEvent(LayzardEvent.BACK, layout, null, null);
                 if (!b && listener.onHandleBack(layout)) {
                     return true;
                 }
@@ -1000,17 +985,17 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
         }
     }
 
-    public class ChildrenHandler extends ListenerDispatcher<BaseLayout> {
+    public class ChildrenHandler extends ListenerDispatcher<Layzard> {
 
-        LinkedHashMap<String, ChildHandler<BaseLayout>> childrenMap = new LinkedHashMap<>();
+        LinkedHashMap<String, ChildHandler<Layzard>> childrenMap = new LinkedHashMap<>();
 
         @Override
-        public void add(LayoutListener<BaseLayout> listener) {
+        public void add(LayzardListener<Layzard> listener) {
 
         }
 
         @Override
-        public void remove(LayoutListener<BaseLayout> listener) {
+        public void remove(LayzardListener<Layzard> listener) {
 
         }
 
@@ -1020,11 +1005,11 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
             childrenMap.clear();
         }
 
-        public void add(ChildHandler<BaseLayout> listener) {
+        public void add(ChildHandler<Layzard> listener) {
             final String tag = listener.initializer.tag;
-            final ChildHandler<BaseLayout> childHandler = childrenMap.get(tag);
+            final ChildHandler<Layzard> childHandler = childrenMap.get(tag);
             if (childHandler != null) {
-                childHandler.layout.reInit(childHandler.initializer.getArgs());
+                childHandler.layout.reCreate(childHandler.initializer.getArgs());
                 return;
             }
             super.add(listener);
@@ -1045,7 +1030,7 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
             return new ArrayList<>(childrenMap.values()).get(index);
         }
 
-        public <L extends BaseLayout> ChildHandler<L> get(Class<L> aClass) {
+        public <L extends Layzard> ChildHandler<L> get(Class<L> aClass) {
             for (ChildHandler childHandler : childrenMap.values()) {
                 if (childHandler.initializer.layoutClass == aClass) {
                     //noinspection unchecked
@@ -1056,29 +1041,29 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
         }
 
 
-        public Map<String, BaseLayout> getLayoutsMap() {
-            Map<String, BaseLayout> result = new HashMap<>();
-            for (Map.Entry<String, ChildHandler<BaseLayout>> entry : childrenMap.entrySet()) {
+        public Map<String, Layzard> getLayoutsMap() {
+            Map<String, Layzard> result = new HashMap<>();
+            for (Map.Entry<String, ChildHandler<Layzard>> entry : childrenMap.entrySet()) {
                 result.put(entry.getKey(), entry.getValue().layout);
             }
             return result;
         }
     }
 
-    public class ChildHandler<L extends BaseLayout> extends SimpleLayoutListener<L> {
+    public class ChildHandler<L extends Layzard> extends DefaultLayzardListener<L> {
 
         private final L layout;
         private int parentViewId;
         private Initializer<L> initializer;
         private ViewGroup parentView;
 
-        private ChildHandler(Initializer<L> initializer, LayoutListener<L> listener) {
+        private ChildHandler(Initializer<L> initializer, LayzardListener<L> listener) {
             this.initializer = initializer;
-            layout = initializer.newLayoutInstance(BaseLayout.this);
+            layout = initializer.newLayoutInstance(Layzard.this);
             layout.addLifecycleListener(listener);
         }
 
-        public ChildHandler(Initializer<L> initializer, @IdRes int parentViewId, @Nullable ViewGroup parentView, LayoutListener<L> listener) {
+        public ChildHandler(Initializer<L> initializer, @IdRes int parentViewId, @Nullable ViewGroup parentView, LayzardListener<L> listener) {
             this(initializer, listener);
             this.parentViewId = parentViewId;
             this.parentView = parentView;
@@ -1086,47 +1071,47 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
         }
 
         private void syncState() {
-            if (BaseLayout.this.isInitialized()) {
-                onInit(BaseLayout.this);
+            if (Layzard.this.isCreated()) {
+                onInit(Layzard.this);
             }
-            final View view = BaseLayout.this.getView();
+            final View view = Layzard.this.getView();
             if (view != null) {
-                onInitUi(BaseLayout.this, view);
+                onInitUi(Layzard.this, view);
             }
             if (isBound() || isBinding()) {
-                onBind(BaseLayout.this);
+                onBind(Layzard.this);
             }
         }
 
         @Override
-        public void onInit(BaseLayout layout) {
-            if (this.layout.isInitialized()) {
+        public void onInit(Layzard layout) {
+            if (this.layout.isCreated()) {
                 return;
             }
-            this.layout.init(layout, layout.getContext(), initializer.getArgs());
+            this.layout.create(layout, layout.getContext(), initializer.getArgs());
         }
 
         @Override
-        public void onInitUi(BaseLayout layout, View view) {
+        public void onInitUi(Layzard layout, View view) {
             if (parentView == null) {
                 parentView = view.findViewById(parentViewId);
             }
-            final View childView = this.layout.initUi(parentView, false);
+            final View childView = this.layout.createView(parentView, false);
             parentView.addView(childView);
         }
 
         @Override
-        public void onBind(BaseLayout layout) {
+        public void onBind(Layzard layout) {
             this.layout.bind();
         }
 
         @Override
-        public void onPreUnbind(BaseLayout layout) {
+        public void onPreUnbind(Layzard layout) {
             this.layout.unbind();
         }
 
         @Override
-        public void onPreDestroyUi(BaseLayout layout, View view) {
+        public void onPreDestroyUi(Layzard layout, View view) {
             parentView.removeView(this.layout.getView());
             this.layout.destroyUi();
             parentView = null;
@@ -1138,22 +1123,22 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
         }
 
         @Override
-        public void onSaveState(BaseLayout layout, Bundle bundle) {
+        public void onSaveState(Layzard layout, Bundle bundle) {
             this.layout.save(bundle, initializer.getTag());
         }
 
         @Override
-        public void onRestoreState(BaseLayout layout, Bundle instanceState) {
+        public void onRestoreState(Layzard layout, Bundle instanceState) {
             this.layout.restore(instanceState, initializer.getTag());
         }
 
         @Override
-        public boolean onHandleBack(BaseLayout layout) {
+        public boolean onHandleBack(Layzard layout) {
             return this.layout.handleBack();
         }
     }
 
-    public static class Initializer<LAYOUT extends BaseLayout> {
+    public static class Initializer<LAYOUT extends Layzard> {
 
         @SuppressWarnings({"UseBulkOperation", "ManualArrayToCollectionCopy"})
         public static ArrayList<Initializer> newList(Initializer... items) {
@@ -1431,11 +1416,11 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
             unwrapper.add(instanceOfClass, function);
         }
 
-        public static <LAYOUT extends BaseLayout> Initializer<LAYOUT> unwrap(Parcelable parcelable) {
+        public static <LAYOUT extends Layzard> Initializer<LAYOUT> unwrap(Parcelable parcelable) {
             return unwrapper.unwrap(parcelable);
         }
 
-        public static <LAYOUT extends BaseLayout> ArrayList<Initializer<LAYOUT>> unwrap(
+        public static <LAYOUT extends Layzard> ArrayList<Initializer<LAYOUT>> unwrap(
                 @Nullable Collection<Parcelable> parcelables) {
             if (parcelables == null) {
                 return null;
@@ -1455,8 +1440,8 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
             return parcelables;
         }
 
-        public interface UnwrapFunction<LAYOUT extends BaseLayout> {
-            BaseLayout.Initializer<LAYOUT> unwrap(Parcelable parcelable);
+        public interface UnwrapFunction<LAYOUT extends Layzard> {
+            Layzard.Initializer<LAYOUT> unwrap(Parcelable parcelable);
         }
 
         private static class Unwrapper {
@@ -1468,7 +1453,7 @@ public abstract class BaseLayout extends SimpleLayoutListener<BaseLayout> {
             }
 
             @SuppressWarnings("unchecked")
-            <LAYOUT extends BaseLayout> Initializer<LAYOUT> unwrap(Parcelable parcelable) {
+            <LAYOUT extends Layzard> Initializer<LAYOUT> unwrap(Parcelable parcelable) {
                 for (Map.Entry<Class<?>, UnwrapFunction> entry : map.entrySet()) {
                     if (entry.getKey().isAssignableFrom(parcelable.getClass())) {
                         return (Initializer<LAYOUT>) entry.getValue().unwrap(parcelable);

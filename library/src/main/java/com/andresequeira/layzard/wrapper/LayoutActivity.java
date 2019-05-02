@@ -4,30 +4,23 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Parcelable;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
-import com.andresequeira.layzard.BaseLayout;
+import com.andresequeira.layzard.Layzard;
 
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.Map;
-
-public class LayoutActivity<L extends BaseLayout> extends AppCompatActivity {
+public class LayoutActivity<L extends Layzard> extends AppCompatActivity {
 
     private static final String EXTRA_LAYOUT_INITIALIZER = "LayoutActivity.layoutInitializer";
 
     private L layout;
 
-    public static void startActivity(Context context, BaseLayout.Initializer<?> initializer) {
+    public static void startActivity(Context context, Layzard.Initializer<?> initializer) {
         startActivity(LayoutActivity.class, context, initializer);
     }
 
     protected static void startActivity(Class<? extends LayoutActivity> layoutActivityClass,
                                         Context context,
-                                        BaseLayout.Initializer<?> initializer) {
+                                        Layzard.Initializer<?> initializer) {
 
         final Intent intent = new Intent(context, layoutActivityClass)
                 .putExtra(EXTRA_LAYOUT_INITIALIZER, initializer.parcelable());
@@ -42,13 +35,18 @@ public class LayoutActivity<L extends BaseLayout> extends AppCompatActivity {
 
 
         Parcelable parcelable = getIntent().getParcelableExtra(EXTRA_LAYOUT_INITIALIZER);
+        final Layzard.Initializer<L> initializer;
         if (parcelable == null) {
-            throw new RuntimeException("This activity must be started with LayoutActivity.startActivity()");
+            initializer = getInitializer();
+            if (initializer == null) {
+                throw new RuntimeException("This activity must be started with LayoutActivity.startActivity() or override getInitializer()");
+            }
+        } else {
+            initializer = Layzard.Initializer.unwrap(parcelable);
         }
-        BaseLayout.Initializer<L> initializer = BaseLayout.Initializer.unwrap(parcelable);
 
         Object last = getLastNonConfigurationInstance();
-        if (last instanceof BaseLayout) {
+        if (last instanceof Layzard) {
             layout = (L) last;
         } else {
             layout = initializer.newLayoutInstance(this);
@@ -58,7 +56,9 @@ public class LayoutActivity<L extends BaseLayout> extends AppCompatActivity {
                 .setIsTop(true)
                 .restore(this, this, initializer.getArgs(), savedInstanceState, null);
 
-        setContentView(getView());
+        setContentView(
+                layout.createView(findViewById(android.R.id.content))
+        );
     }
 
     @Override
@@ -102,7 +102,7 @@ public class LayoutActivity<L extends BaseLayout> extends AppCompatActivity {
         super.onBackPressed();
     }
 
-    protected View getView() {
-        return layout.initUi(findViewById(android.R.id.content));
+    protected Layzard.Initializer<L> getInitializer() {
+        return null;
     }
 }
