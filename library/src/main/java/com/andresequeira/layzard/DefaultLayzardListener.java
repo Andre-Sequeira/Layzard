@@ -4,116 +4,117 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
 import androidx.annotation.Nullable;
+import androidx.annotation.NonNull;
 import org.jetbrains.annotations.NotNull;
 
 public abstract class DefaultLayzardListener<L extends Layzard> implements LayzardListener<L> {
 
     @Override
-    public boolean onEvent(@NotNull LayzardEvent event, @NotNull L layout, @Nullable View view, @Nullable Bundle bundle) {
-        return LayzardListener.DefaultImpls.onEvent(this, event, layout, view, bundle);
+    public boolean onEvent(@NotNull LayzardEvent<?> event, @NotNull L layzard, @NotNull Object[] params) {
+        return LayzardListener.DefaultImpls.onEvent(this, event, layzard, params);
     }
 
     @Override
-    public void onPreReInit(@NotNull L layout) {
-        LayzardListener.DefaultImpls.onPreReInit(this, layout);
+    public void onPreReCreate(@NonNull L layzard) {
+        LayzardListener.DefaultImpls.onPreReCreate(this, layzard);
     }
 
     @Override
-    public void onReInit(@NotNull L layout) {
-        LayzardListener.DefaultImpls.onReInit(this, layout);
+    public void onReCreate(@NonNull L layzard) {
+        LayzardListener.DefaultImpls.onReCreate(this, layzard);
     }
 
     @Override
-    public void onPreInit(@NotNull L layout) {
-        LayzardListener.DefaultImpls.onPreInit(this, layout);
+    public void onPreCreate(@NonNull L layzard) {
+        LayzardListener.DefaultImpls.onPreCreate(this, layzard);
     }
 
     @Override
-    public void onInit(@NotNull L layout) {
-        LayzardListener.DefaultImpls.onInit(this, layout);
+    public void onCreate(@NonNull L layzard) {
+        LayzardListener.DefaultImpls.onCreate(this, layzard);
     }
 
     @Override
-    public void onPreInitUi(@NotNull L layout) {
-        LayzardListener.DefaultImpls.onPreInitUi(this, layout);
+    public void onPreCreateView(@NonNull L layzard) {
+        LayzardListener.DefaultImpls.onPreCreateView(this, layzard);
     }
 
     @Override
-    public void onInitUi(@NotNull L layout, @NotNull View view) {
-        LayzardListener.DefaultImpls.onInitUi(this, layout, view);
+    public void onCreateView(@NonNull L layzard, @NonNull View view) {
+        LayzardListener.DefaultImpls.onCreateView(this, layzard, view);
     }
 
     @Override
-    public void onPreRebind(@NotNull L layout) {
-        LayzardListener.DefaultImpls.onPreRebind(this, layout);
+    public void onPreRebind(@NonNull L layzard) {
+        LayzardListener.DefaultImpls.onPreRebind(this, layzard);
     }
 
     @Override
-    public void onRebind(@NotNull L layout) {
-        LayzardListener.DefaultImpls.onRebind(this, layout);
+    public void onRebind(@NonNull L layzard) {
+        LayzardListener.DefaultImpls.onRebind(this, layzard);
     }
 
     @Override
-    public void onPreBind(@NotNull L layout) {
-        LayzardListener.DefaultImpls.onPreBind(this, layout);
+    public void onPreBind(@NonNull L layzard) {
+        LayzardListener.DefaultImpls.onPreBind(this, layzard);
     }
 
     @Override
-    public void onBind(@NotNull L layout) {
-        LayzardListener.DefaultImpls.onBind(this, layout);
+    public void onBind(@NonNull L layzard) {
+        LayzardListener.DefaultImpls.onBind(this, layzard);
     }
 
     @Override
-    public void onBound(@NotNull L layout) {
-//        LayzardListener.DefaultImpls.onBound(this, layout);
+    public void onBound(@NonNull L layzard) {
+        LayzardListener.DefaultImpls.onBound(this, layzard);
     }
 
     @Override
-    public void onPreUnbind(@NotNull L layout) {
-        LayzardListener.DefaultImpls.onPreUnbind(this, layout);
+    public void onPreUnbind(@NonNull L layzard) {
+        LayzardListener.DefaultImpls.onPreUnbind(this, layzard);
     }
 
     @Override
-    public void onUnbind(@NotNull L layout) {
-        LayzardListener.DefaultImpls.onUnbind(this, layout);
+    public void onUnbind(@NonNull L layzard) {
+        LayzardListener.DefaultImpls.onUnbind(this, layzard);
     }
 
     @Override
-    public void onPreDestroyUi(@NotNull L layout, @NotNull View view) {
-        LayzardListener.DefaultImpls.onPreDestroyUi(this, layout, view);
+    public void onPreDestroyView(@NonNull L layzard, @NonNull View view) {
+        LayzardListener.DefaultImpls.onPreDestroyView(this, layzard, view);
     }
 
     @Override
-    public void onDestroyUi(@NotNull L layout, @NotNull View view) {
-        LayzardListener.DefaultImpls.onDestroyUi(this, layout, view);
+    public void onDestroyView(@NonNull L layzard, @NonNull View view) {
+        LayzardListener.DefaultImpls.onDestroyView(this, layzard, view);
     }
 
     @Override
-    public void onPreDestroy(@NotNull L layout) {
-        LayzardListener.DefaultImpls.onPreDestroy(this, layout);
+    public void onPreDestroy(@NonNull L layzard) {
+        LayzardListener.DefaultImpls.onPreDestroy(this, layzard);
     }
 
     @Override
-    public void onDestroy(@NotNull L layout) {
-        LayzardListener.DefaultImpls.onDestroy(this, layout);
+    public void onDestroy(@NonNull L layzard) {
+        LayzardListener.DefaultImpls.onDestroy(this, layzard);
     }
 
     @Override
-    public void onSaveState(@NotNull L layout, @NotNull Bundle bundle) {
-        LayzardListener.DefaultImpls.onSaveState(this, layout, bundle);
+    public void onSaveState(@NonNull L layzard, @NonNull Bundle bundle) {
+        LayzardListener.DefaultImpls.onSaveState(this, layzard, bundle);
     }
 
     @Override
-    public void onRestoreState(@NotNull L layout, @NotNull Bundle instanceState) {
-        LayzardListener.DefaultImpls.onRestoreState(this, layout, instanceState);
+    public void onRestoreState(@NonNull L layzard, @NonNull Bundle instanceState) {
+        LayzardListener.DefaultImpls.onRestoreState(this, layzard, instanceState);
     }
 
     @Override
-    public void onActivityResult(@NotNull L layout, int requestCode, int resultCode, @Nullable Intent data) {
-        LayzardListener.DefaultImpls.onActivityResult(this, layout, requestCode, resultCode, data);
+    public void onActivityResult(@NonNull L layzard, int requestCode, int resultCode, @Nullable Intent data) {
+        LayzardListener.DefaultImpls.onActivityResult(this, layzard, requestCode, resultCode, data);
     }
 
-    public boolean onHandleBack(@NotNull L layout) {
-        return LayzardListener.DefaultImpls.onHandleBack(this, layout);
+    public boolean onHandleBack(@NonNull L layzard) {
+        return LayzardListener.DefaultImpls.onHandleBack(this, layzard);
     }
 }

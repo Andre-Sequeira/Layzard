@@ -3,52 +3,57 @@ package com.andresequeira.layzard
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import java.util.*
 
 interface LayzardListener<in L : Layzard> {
 
-    fun onEvent(event: LayzardEvent, layout: L, view: View?, bundle: Bundle?): Boolean {
+    companion object {
+        private val emptyParams = emptyArray<Any>()
+    }
+
+    fun onEvent(event: LayzardEvent<*>, layzard: L, params: Array<out Any> = emptyParams): Boolean {
         return false
     }
 
-    fun onPreReInit(layout: L) {}
+    fun onPreReCreate(layzard: L) {}
 
-    fun onReInit(layout: L) {}
+    fun onReCreate(layzard: L) {}
 
-    fun onPreInit(layout: L) {}
+    fun onPreCreate(layzard: L) {}
 
-    fun onInit(layout: L) {}
+    fun onCreate(layzard: L) {}
 
-    fun onRestoreState(layout: L, instanceState: Bundle) {}
+    fun onRestoreState(layzard: L, bundle: Bundle) {}
 
-    fun onPreInitUi(layout: L) {}
+    fun onPreCreateView(layzard: L) {}
 
-    fun onInitUi(layout: L, view: View) {}
+    fun onCreateView(layzard: L, view: View) {}
 
-    fun onPreRebind(layout: L) {}
+    fun onPreRebind(layzard: L) {}
 
-    fun onRebind(layout: L) {}
+    fun onRebind(layzard: L) {}
 
-    fun onPreBind(layout: L) {}
+    fun onPreBind(layzard: L) {}
 
-    fun onBind(layout: L) {}
+    fun onBind(layzard: L) {}
 
-    fun onBound(layout: L) {}
+    fun onBound(layzard: L) {}
 
-    fun onPreUnbind(layout: L) {}
+    fun onPreUnbind(layzard: L) {}
 
-    fun onUnbind(layout: L) {}
+    fun onUnbind(layzard: L) {}
 
-    fun onPreDestroyUi(layout: L, view: View) {}
+    fun onPreDestroyView(layzard: L, view: View) {}
 
-    fun onDestroyUi(layout: L, view: View) {}
+    fun onDestroyView(layzard: L, view: View) {}
 
-    fun onSaveState(layout: L, bundle: Bundle) {}
+    fun onSaveState(layzard: L, bundle: Bundle) {}
 
-    fun onPreDestroy(layout: L) {}
+    fun onPreDestroy(layzard: L) {}
 
-    fun onDestroy(layout: L) {}
+    fun onDestroy(layzard: L) {}
 
-    fun onActivityResult(layout: L, requestCode: Int, resultCode: Int, data: Intent?) {}
+    fun onActivityResult(layzard: L, requestCode: Int, resultCode: Int, data: Intent?) {}
 
-    fun onHandleBack(layout: L): Boolean = false
+    fun onHandleBack(layzard: L): Boolean = false
 }

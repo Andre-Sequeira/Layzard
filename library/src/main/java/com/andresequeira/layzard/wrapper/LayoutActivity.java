@@ -7,20 +7,22 @@ import android.os.Parcelable;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import com.andresequeira.layzard.Layzard;
+import com.andresequeira.layzard.LayzardInitializer;
+import com.andresequeira.layzard.LayzardKt;
 
 public class LayoutActivity<L extends Layzard> extends AppCompatActivity {
 
     private static final String EXTRA_LAYOUT_INITIALIZER = "LayoutActivity.layoutInitializer";
 
-    private L layout;
+    private L layzard;
 
-    public static void startActivity(Context context, Layzard.Initializer<?> initializer) {
+    public static void startActivity(Context context, LayzardInitializer<?> initializer) {
         startActivity(LayoutActivity.class, context, initializer);
     }
 
     protected static void startActivity(Class<? extends LayoutActivity> layoutActivityClass,
                                         Context context,
-                                        Layzard.Initializer<?> initializer) {
+                                        LayzardInitializer<?> initializer) {
 
         final Intent intent = new Intent(context, layoutActivityClass)
                 .putExtra(EXTRA_LAYOUT_INITIALIZER, initializer.parcelable());
@@ -35,74 +37,82 @@ public class LayoutActivity<L extends Layzard> extends AppCompatActivity {
 
 
         Parcelable parcelable = getIntent().getParcelableExtra(EXTRA_LAYOUT_INITIALIZER);
-        final Layzard.Initializer<L> initializer;
+        final LayzardInitializer<L> initializer;
         if (parcelable == null) {
             initializer = getInitializer();
             if (initializer == null) {
                 throw new RuntimeException("This activity must be started with LayoutActivity.startActivity() or override getInitializer()");
             }
         } else {
-            initializer = Layzard.Initializer.unwrap(parcelable);
+            initializer = LayzardInitializer.Companion.unwrap(parcelable);
         }
 
         Object last = getLastNonConfigurationInstance();
         if (last instanceof Layzard) {
-            layout = (L) last;
+            layzard = (L) last;
         } else {
-            layout = initializer.newLayoutInstance(this);
+            layzard = initializer.newLayzard(this);
         }
 
-        layout.setIsRoot(isTaskRoot())
+        layzard.setIsRoot(isTaskRoot())
                 .setIsTop(true)
-                .restore(this, this, initializer.getArgs(), savedInstanceState, null);
+                .restoreWith(this, initializer.getArgs(), savedInstanceState, null);
 
         setContentView(
-                layout.createView(findViewById(android.R.id.content))
+                layzard.createView(findViewById(android.R.id.content))
         );
+
+        layzard = layzard.newArgs(new Bundle());
+        LayzardKt.newArgs()
     }
 
     @Override
     protected void onRestoreInstanceState(Bundle savedInstanceState) {
         super.onRestoreInstanceState(savedInstanceState);
-        layout.restore(savedInstanceState, null);
+        layzard.restoreWith(savedInstanceState, null);
     }
 
     @Override
     public void onSaveInstanceState(Bundle outState) {
-        layout.save(outState, null);
+        layzard.save(outState, null);
         super.onSaveInstanceState(outState);
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        layout.onActivityResult(layout, requestCode, resultCode, data);
+        layzard.onActivityResult(layzard, requestCode, resultCode, data);
     }
 
     @Override
     protected void onDestroy() {
-        layout.destroyUi();
+        layzard.destroyView();
         if (!isChangingConfigurations()) {
-            layout.destroy();
+            layzard.destroy();
         }
-        layout = null;
+        layzard = null;
         super.onDestroy();
     }
 
     @Override
     public Object onRetainCustomNonConfigurationInstance() {
-        return layout;
+        return layzard;
     }
 
     @Override
     public void onBackPressed() {
-        if (layout.handleBack()) {
+        if (layzard.handleBack()) {
             return;
         }
         super.onBackPressed();
     }
 
-    protected Layzard.Initializer<L> getInitializer() {
+    protected LayzardInitializer<L> getInitializer() {
         return null;
+    }
+
+    @Nullable
+    public L getLayzard() {
+        return layzard;
     }
 }

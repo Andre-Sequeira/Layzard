@@ -2,7 +2,6 @@ package com.andresequeira.layzard.wrapper;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.os.Parcelable;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -12,17 +11,19 @@ import androidx.appcompat.app.AppCompatDialogFragment;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import com.andresequeira.layzard.Layzard;
+import com.andresequeira.layzard.LayzardInitializer;
 
 import java.util.List;
+import java.util.Objects;
 
-public class LayoutFragment<LAYOUT extends Layzard> extends AppCompatDialogFragment {
+public class LayoutFragment<L extends Layzard> extends AppCompatDialogFragment {
 
     private static final String KEY_LAYOUT_INITIALIZER = "LayoutFragment.layoutInitializer";
 //    private static final String KEY_AS_DIALOG = "LayoutFragment.showAsDialog";
 
-    private LAYOUT layout;
+    private L layzard;
 
-    public static <L extends Layzard> LayoutFragment<L> newFragment(Layzard.Initializer<L> initializer) {
+    public static <L extends Layzard> LayoutFragment<L> newFragment(LayzardInitializer<L> initializer) {
         Bundle args = new Bundle();
         if (initializer != null) {
             args.putParcelable(KEY_LAYOUT_INITIALIZER, initializer.parcelable());
@@ -32,8 +33,8 @@ public class LayoutFragment<LAYOUT extends Layzard> extends AppCompatDialogFragm
         return fragment;
     }
 
-    private static <LAYOUT extends Layzard> Layzard.Initializer<LAYOUT> getLayoutInitializer(
-            LayoutFragment<LAYOUT> instance) {
+    private static <L extends Layzard> LayzardInitializer<L> getLayoutInitializer(
+            LayoutFragment<L> instance) {
         final Bundle arguments = instance.getArguments();
         if (arguments == null) {
             throw new RuntimeException();
@@ -41,31 +42,21 @@ public class LayoutFragment<LAYOUT extends Layzard> extends AppCompatDialogFragm
         return getLayoutInitializer(arguments);
     }
 
-    private static <LAYOUT extends Layzard> Layzard.Initializer<LAYOUT> getLayoutInitializer(
-            Bundle bundle) {
-        return Layzard.Initializer.unwrap(
-                (Parcelable) bundle.getParcelable(KEY_LAYOUT_INITIALIZER)
+    private static <L extends Layzard> LayzardInitializer<L> getLayoutInitializer(Bundle bundle) {
+        return LayzardInitializer.unwrap(
+                Objects.requireNonNull(bundle.getParcelable(KEY_LAYOUT_INITIALIZER))
         );
     }
 
 
-    private static <LAYOUT extends Layzard> Class<LAYOUT> getLayoutClass(
-            LayoutFragment<LAYOUT> instance) {
-        return getLayoutInitializer(instance).getLayoutClass();
+    private static <L extends Layzard> Class<L> getLayoutClass(
+            LayoutFragment<L> instance) {
+        return getLayoutInitializer(instance).getLayzardClass();
     }
 
-    private static <LAYOUT extends Layzard> Bundle getLayoutArgs(
-            LayoutFragment<LAYOUT> instance) {
+    private static <L extends Layzard> Bundle getLayoutArgs(
+            LayoutFragment<L> instance) {
         return getLayoutInitializer(instance).getArgs();
-    }
-
-    private static Bundle checkArgs(Bundle args) {
-        if (getLayoutInitializer(args) == null) {
-            throw new RuntimeException("constructor(Bundle) should only be called on restore " +
-                    "instances. The first constructor to be called should always be one one with " +
-                    "Initializer<LAYOUT>");
-        }
-        return args;
     }
 
 //    @SuppressWarnings("ConstantConditions")
@@ -89,25 +80,26 @@ public class LayoutFragment<LAYOUT extends Layzard> extends AppCompatDialogFragm
 //        return super.onCreateDialog(savedInstanceState);
 //    }
 
+    @SuppressWarnings("ConstantConditions")
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         if (!isLayoutCreated()) {
-            final LAYOUT layout = getLayout();
+            final L layout = getLayzard();
             setLayoutConfigs(layout);
-            layout.restore(this, getContext(), getLayoutArgs(), savedInstanceState, null);
+            layout.restoreWith(getContext(), getLayoutArgs(), savedInstanceState, null);
         }
     }
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        return getLayout().createView(inflater, container);
+        return getLayzard().createView(inflater, container);
     }
 
     @Override
     public void onSaveInstanceState(@NonNull Bundle outState) {
-        final LAYOUT layout = getLayout();
+        final L layout = getLayzard();
         if (layout != null) {
             layout.save(outState, null);
         }
@@ -116,18 +108,18 @@ public class LayoutFragment<LAYOUT extends Layzard> extends AppCompatDialogFragm
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        getLayout().onActivityResult(getLayout(), requestCode, resultCode, data);
+        getLayzard().onActivityResult(getLayzard(), requestCode, resultCode, data);
     }
 
     @Override
     public void onDestroyView() {
-        getLayout().destroyUi();
+        getLayzard().destroyView();
         super.onDestroyView();
     }
 
     @Override
     public void onDestroy() {
-        final LAYOUT layout = getLayout();
+        final L layout = getLayzard();
         if (layout != null) {
             layout.destroy();
         }
@@ -136,22 +128,22 @@ public class LayoutFragment<LAYOUT extends Layzard> extends AppCompatDialogFragm
 
 
     public boolean isLayoutCreated() {
-        LAYOUT layout = getLayout();
+        L layout = getLayzard();
         if (layout == null) {
             return false;
         }
         return layout.isCreated();
     }
 
-    public LAYOUT getLayout() {
-        if (layout == null) {
-            layout = getLayoutInitializer().newLayoutInstance(this);
+    public L getLayzard() {
+        if (layzard == null) {
+            layzard = getLayoutInitializer().newLayzard(this);
         }
-        return layout;
+        return layzard;
     }
 
 
-    private void setLayoutConfigs(LAYOUT layout) {
+    private void setLayoutConfigs(L layout) {
         layout.setIsTop(getParentFragment() == null);
         final FragmentManager fragmentManager = getFragmentManager();
 
@@ -172,7 +164,7 @@ public class LayoutFragment<LAYOUT extends Layzard> extends AppCompatDialogFragm
         layout.setIsRoot(isRoot);
     }
 
-    private Layzard.Initializer<LAYOUT> getLayoutInitializer() {
+    private LayzardInitializer<L> getLayoutInitializer() {
         return getLayoutInitializer(this);
     }
 
